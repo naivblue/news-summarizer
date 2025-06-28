@@ -1,0 +1,76 @@
+# 데이터 폴더
+data/
+data/raw/
+data/processed/
+data/summarized/
+
+# 가상환경
+.venv/
+venv/
+env/
+ENV/
+.uv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Jupyter Notebook (체크포인트만 제외)
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 로그 파일
+*.log
+
+# 임시 파일
+*.tmp
+*.temp
+
+# 환경 변수
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 모델 캐시 (transformers)
+.cache/
+transformers_cache/
+
+# 결과 파일 (선택적)
+results/
+outputs/ 
