@@ -51,61 +51,149 @@ class NewsCrawler:
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # 새로운 네이버 뉴스 구조에 맞게 수정
                 # group_news 클래스 안의 뉴스 아이템들 찾기
                 news_container = soup.find('div', class_='group_news')
                 if not news_container:
                     print(f"페이지 {page}에서 뉴스 컨테이너를 찾을 수 없습니다.")
                     break
                 
-                # 뉴스 아이템들 찾기 (I6obO60yNcW8I32mDzvQ 클래스)
-                news_items = news_container.find_all('div', class_='I6obO60yNcW8I32mDzvQ')
+                # 네이버 뉴스 링크들 찾기
+                all_links = news_container.find_all('a', href=True)
+                naver_news_links = []
                 
-                if not news_items:
-                    print(f"페이지 {page}에서 뉴스를 찾을 수 없습니다.")
+                for link in all_links:
+                    href = link.get('href')
+                    if href and 'news.naver.com' in href:
+                        naver_news_links.append(href)
+                
+                # 중복 제거
+                naver_news_links = list(set(naver_news_links))
+                
+                if not naver_news_links:
+                    print(f"페이지 {page}에서 뉴스 링크를 찾을 수 없습니다.")
                     break
                 
-                for item in news_items:
+                print(f"페이지 {page}: {len(naver_news_links)}개 뉴스 링크 발견")
+                
+                # 각 뉴스 링크에서 상세 정보 추출
+                for i, news_link in enumerate(naver_news_links):
                     try:
-                        # 제목 추출 (W035WwZVZIWyuG66e5iI 클래스의 a 태그)
-                        title_element = item.find('a', class_='W035WwZVZIWyuG66e5iI')
-                        title = ""
-                        link = ""
-                        if title_element:
-                            title = title_element.get_text(strip=True)
-                            link = title_element.get('href', "")
+                        # 개별 뉴스 페이지 접근
+                        news_response = self.session.get(news_link)
+                        news_response.raise_for_status()
                         
-                        # 요약 추출 (ti6bfMWvbomDA5J1fNOX 클래스의 a 태그)
-                        summary_element = item.find('a', class_='ti6bfMWvbomDA5J1fNOX')
-                        summary = summary_element.get_text(strip=True) if summary_element else ""
+                        news_soup = BeautifulSoup(news_response.text, 'html.parser')
                         
-                        # 언론사 추출 (sds-comps-profile-info-title-text 클래스)
-                        press_element = item.find('span', class_='sds-comps-profile-info-title-text')
-                        press = press_element.get_text(strip=True) if press_element else ""
+                        # 제목 추출
+                        title = None
+                        title_selectors = [
+                            'h2#title_area span',
+                            'h3#articleTitle',
+                            '.media_end_head_headline',
+                            'h2.media_end_head_headline',
+                            '.article_title'
+                        ]
                         
-                        # 날짜 추출 (vVkv3w6EdDH42m2lfgVt 클래스의 span)
-                        date_element = item.find('span', class_='vVkv3w6EdDH42m2lfgVt')
-                        date = date_element.get_text(strip=True) if date_element else ""
+                        for selector in title_selectors:
+                            try:
+                                elem = news_soup.select_one(selector)
+                                if elem:
+                                    title = elem.get_text(strip=True)
+                                    break
+                            except:
+                                continue
                         
-                        if title and link:
+                        # 다른 방법으로 제목 찾기
+                        if not title:
+                            h_tags = news_soup.find_all(['h1', 'h2', 'h3'])
+                            for h in h_tags:
+                                text = h.get_text(strip=True)
+                                if text and len(text) > 10 and '뉴스' not in text:
+                                    title = text
+                                    break
+                        
+                        # 내용 추출
+                        content = None
+                        content_selectors = [
+                            '#newsct_article',
+                            '.news_end_body_container',
+                            '#articleBodyContents',
+                            '.article_body'
+                        ]
+                        
+                        for selector in content_selectors:
+                            try:
+                                elem = news_soup.select_one(selector)
+                                if elem:
+                                    content = elem.get_text(strip=True)
+                                    break
+                            except:
+                                continue
+                        
+                        # 언론사 추출
+                        press = None
+                        press_selectors = [
+                            '.media_end_head_top_logo img',
+                            '.press_logo img',
+                            '.media_end_head_top_logo_text',
+                            '.press_name'
+                        ]
+                        
+                        for selector in press_selectors:
+                            try:
+                                elem = news_soup.select_one(selector)
+                                if elem:
+                                    if elem.name == 'img':
+                                        press = elem.get('alt', '')
+                                    else:
+                                        press = elem.get_text(strip=True)
+                                    if press:
+                                        break
+                            except:
+                                continue
+                        
+                        # 날짜 추출
+                        date = None
+                        date_selectors = [
+                            '.media_end_head_info_datestamp_time',
+                            '.article_info span',
+                            '.date'
+                        ]
+                        
+                        for selector in date_selectors:
+                            try:
+                                elem = news_soup.select_one(selector)
+                                if elem:
+                                    date = elem.get_text(strip=True)
+                                    break
+                            except:
+                                continue
+                        
+                        if title and content:
                             news_data.append({
                                 'title': title,
-                                'link': link,
-                                'press': press,
-                                'summary': summary,
-                                'date': date,
+                                'link': news_link,
+                                'press': press or "",
+                                'content': content,
+                                'date': date or "",
                                 'keyword': keyword,
                                 'crawled_at': datetime.now().isoformat()
                             })
+                            print(f"  뉴스 {i+1}/{len(naver_news_links)} 수집 완료: {title[:30]}...")
+                        else:
+                            print(f"  뉴스 {i+1}/{len(naver_news_links)} 스킵: 제목 또는 내용 없음")
                     
                     except Exception as e:
-                        print(f"뉴스 아이템 파싱 중 오류: {e}")
+                        print(f"  뉴스 {i+1}/{len(naver_news_links)} 파싱 중 오류: {e}")
                         continue
+                    
+                    # 서버 부하 방지를 위한 딜레이
+                    time.sleep(random.uniform(0.5, 1.5))
                 
-                print(f"페이지 {page} 완료: {len(news_items)}개 뉴스 수집")
+                print(f"페이지 {page} 완료: {len([n for n in news_data if n['keyword'] == keyword])}개 뉴스 수집")
                 
-                # 서버 부하 방지를 위한 딜레이
-                time.sleep(random.uniform(1, 3))
+                # 페이지 간 딜레이
+                time.sleep(random.uniform(2, 4))
                 
             except Exception as e:
                 print(f"페이지 {page} 크롤링 중 오류: {e}")
@@ -142,13 +230,13 @@ def main():
     crawler = NewsCrawler()
     
     # 검색할 키워드들
-    keywords = ['ETF', '미국주식', '비트코인', '테슬라', '스테이블코인']
+    keywords = ['ETF','미국 주식']
     
     all_news_data = []
     
     for keyword in keywords:
         print(f"\n키워드 '{keyword}'로 뉴스 수집 시작...")
-        news_data = crawler.crawl_naver_news(keyword, max_pages=2)
+        news_data = crawler.crawl_naver_news(keyword, max_pages=1)
         all_news_data.extend(news_data)
         print(f"키워드 '{keyword}' 완료: {len(news_data)}개 뉴스 수집")
     
@@ -156,11 +244,11 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d")
     
     # JSON 형식으로 저장
-    json_filename = f"../data/raw/naver_news_{timestamp}.json"
+    json_filename = f"data/raw/naver_news_{timestamp}.json"
     crawler.save_to_file(all_news_data, json_filename, 'json')
     
     # CSV 형식으로 저장 (주석처리)
-    # csv_filename = f"../data/raw/naver_news_{timestamp}.csv"
+    # csv_filename = f"data/raw/naver_news_{timestamp}.csv"
     # crawler.save_to_file(all_news_data, csv_filename, 'csv')
     
     print(f"\n총 {len(all_news_data)}개의 뉴스 데이터를 수집했습니다.")
